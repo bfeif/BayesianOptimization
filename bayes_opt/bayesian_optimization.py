@@ -10,7 +10,6 @@ from matplotlib import gridspec
 
 
 
-
 class BayesianOptimization(object):
 
     def __init__(self, f, pbounds, verbose=1):
@@ -353,7 +352,34 @@ class BayesianOptimization(object):
 
     def plot_stuff(self,params,resolution):
         '''
-        Nesting function for plotting. Takes in data in the form:
+        Nest function for plotting.
+        
+        :param params
+            A dictionary that contains the parameter values/ranges for plotting, where 'None' indicates
+            to plot over that variable
+            
+            example 1:
+            for target function p(x,y,z),
+            params = {
+                x: 1,
+                y: 2,
+                z: None
+            }
+            projects the parameter space onto a 1d hyperplane defined by p = f(x=1,y=2,z)
+            
+
+            example 2:
+            for target function p(x,y,z),
+            params = {
+                x: 1,
+                y: None,
+                z: None
+            }
+            projects the parameter space onto a 2d hyperplane defined by p = f(x=1,y,z)
+
+        :param resolution
+            The length to use for the plotting variable(s) indicated in 'params'
+
         '''
         mesh,mu,sigma,utility = self.posterior(params,resolution)
         plot_params = [k for k,v in params.iteritems() if v == None]
@@ -366,7 +392,29 @@ class BayesianOptimization(object):
             print('invalid number of plotting variables passed in')
 
     def plot1d(self,mesh,params,plot_param,mu,sigma,resolution):
+        '''
+        plot 1d thing
+        
+        Parameters
+        ----------
+        :param mesh
+            a parameter mesh passed from get_parameter_mesh()
 
+        :param params
+            passed from plot_stuff function
+
+        :param plot_param
+            the parameter being plotted over
+
+        :param mu
+            GP predicted mean
+
+        :param sigma
+            GP predicted uncertainty
+
+        :param resolution
+            plotting resolution
+        '''
         x = mesh[:,self.keys.index(plot_param)].flatten()
         fontsize = 9
 
@@ -412,6 +460,29 @@ class BayesianOptimization(object):
         plt.show()
 
     def plot2d(self,mesh,params,plot_params,mu,sigma,utility,resolution):
+        '''
+        plot 2d thing
+        
+        Parameters
+        ----------
+        :param mesh
+            a parameter mesh passed from get_parameter_mesh()
+
+        :param params
+            passed from plot_stuff function
+
+        :param plot_params
+            list of the 2 parameter being plotted over
+
+        :param mu
+            GP predicted mean
+
+        :param sigma
+            GP predicted uncertainty
+
+        :param resolution
+            plotting resolution
+        '''
         fontsize = 13
 
         # prepare shit. make the plot objects and get the range that you're plotting over
@@ -468,6 +539,20 @@ class BayesianOptimization(object):
     def get_parameter_mesh(self,param_inputs,resolution):
         '''
         A helper function for 'plot_stuff' method. Takes parameter range that is being plotted over and returns a set of mesh-grid points for that range
+        
+        Parameters
+        ----------
+        :param param_inputs
+            passed from plot_stuff function
+
+        :param resolution
+            passed from plot_stuff function
+
+        Returns
+        _______
+        :return X
+            np.ndarray of shape (nb plotting points, nb target function features)
+
         '''
 
         param_inputs_copy = param_inputs.copy()
@@ -484,7 +569,29 @@ class BayesianOptimization(object):
 
     def posterior(self,param_inputs,resolution):
         '''
-        Takes 
+        Computes posterior over the parameter space
+
+        Parameters
+        __________
+        :param param_inputs
+            passed from plot_stuff function
+
+        :param resolution
+            passed from plot_stuff function
+
+        Returns
+        _______
+        :return mesh
+            passed from function get_parameter_mesh, np.ndarray of shape (nb plotting points, nb target function features)
+
+        :return mu
+            GP predicted mean, np.ndarray of shape (nb plotting points,)
+
+        :return sigma
+            GP predicted uncertainty, np.ndarray of shape (nb plotting points,)
+
+        :return utility
+            acquisition function, np.ndarray of shape (nb plotting points,)
         '''
         mesh = self.get_parameter_mesh(param_inputs,resolution)
         self.gp.fit(self.X, self.Y)
