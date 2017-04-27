@@ -5,7 +5,32 @@ from datetime import datetime
 from scipy.stats import norm
 from scipy.optimize import minimize
 
+def param_mapping_helper(param,value = None):
+    if param == 'tau_exp':
+        if value==None:
+            k = r'$log(\tau)$'
+        else:
+            k,v =  r'$\tau$','1e{:.1f}'.format(value)
+    elif param == 'sigma_exp':
+        if value == None:
+            k = r'$log(\sigma)$'
+        else:
+            k,v =  r'$\sigma$','1e{:.1f}'.format(value)
+    elif param == 'percentile_exp':
+        k,v =  'percentile','{:.3f}'.format(1-np.power(10,value))
+    elif param == 'alpha':
+        k,v =  r'$\alpha$','{:.2f}'.format(value)
+    elif param == 'epsilon':
+        k,v =  r'$\epsilon$','{:.3f}'.format(value)
+    elif param == 'samples':
+        k,v =  'samples', '{:.0f}'.format(value)
+    else:
+        print('man u screwed something up')
 
+    if value==None:
+        return k
+    else:
+        return k,v
 
 def acq_max(ac, gp, y_max, bounds):
     """
