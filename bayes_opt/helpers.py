@@ -6,6 +6,7 @@ from scipy.stats import norm
 from scipy.optimize import minimize
 
 
+
 def acq_max(ac, gp, y_max, bounds):
     """
     A function to find the maximum of the acquisition function
@@ -93,7 +94,7 @@ class UtilityFunction(object):
     @staticmethod
     def _ucb(x, gp, kappa):
         mean, std = gp.predict(x, return_std=True)
-        return mean + kappa * std
+        return (1-kappa)*mean + kappa * std
 
     @staticmethod
     def _ei(x, gp, y_max, xi):
