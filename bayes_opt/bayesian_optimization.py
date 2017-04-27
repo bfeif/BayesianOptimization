@@ -1,10 +1,14 @@
-from __future__ import print_function
+# from __future__ import print_function
 from __future__ import division
 
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern
-from .helpers import UtilityFunction, unique_rows, PrintLog, acq_max
+from .helpers import UtilityFunction, unique_rows, PrintLog, acq_max, param_mapping_helper
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+
+
 
 
 class BayesianOptimization(object):
@@ -76,6 +80,9 @@ class BayesianOptimization(object):
 
         # Verbose
         self.verbose = verbose
+
+        # set the parameter mesh
+        # self.set_parameter_mesh()
 
     def init(self, init_points):
         """
@@ -219,13 +226,7 @@ class BayesianOptimization(object):
             # Reset all entries, even if the same.
             self.bounds[row] = self.pbounds[key]
 
-    def maximize(self,
-                 init_points=5,
-                 n_iter=25,
-                 acq='ucb',
-                 kappa=2.576,
-                 xi=0.0,
-                 **gp_params):
+    def maximize(self,init_points=5,n_iter=25,acq='ucb',kappa=2.576,xi=0.0,**gp_params):
         """
         Main optimization method.
 
@@ -349,3 +350,147 @@ class BayesianOptimization(object):
         points = np.hstack((self.X, np.expand_dims(self.Y, axis=1)))
         header = ', '.join(self.keys + ['target'])
         np.savetxt(file_name, points, header=header, delimiter=',')
+
+    def plot_stuff(self,params,resolution):
+        '''
+        Nesting function for plotting. Takes in data in the form:
+        '''
+        mesh,mu,sigma,utility = self.posterior(params,resolution)
+        plot_params = [k for k,v in params.iteritems() if v == None]
+
+        if len(plot_params) == 1:
+            self.plot1d(mesh,params,plot_params[0],mu,sigma,resolution)
+        elif len(plot_params) == 2:
+            self.plot2d(mesh,params,plot_params,mu,sigma,utility,resolution)
+        else:
+            print('invalid number of plotting variables passed in')
+
+    def plot1d(self,mesh,params,plot_param,mu,sigma,resolution):
+
+        x = mesh[:,self.keys.index(plot_param)].flatten()
+        fontsize = 9
+
+        fig = plt.figure(figsize=(7, 5))
+        rest_string = 'Gaussian Process and Utility Function After {} Steps, projected onto {}\n'.format(len(self.X),param_mapping_helper(plot_param,0,just_param = True))
+        for k,v in params.iteritems():
+            if v is not None:
+                kn,vn = param_mapping_helper(k,v)
+                rest_string += '{} = {}, '.format(kn,vn)
+        rest_string = rest_string[:-2]
+        fig.suptitle(rest_string,fontdict={'size':fontsize+2})
+        
+        gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1]) 
+        axis = plt.subplot(gs[0])
+        acq = plt.subplot(gs[1])
+        
+        # axis.plot(x, y, linewidth=3, label='Target')
+        axis.plot(self.X[:,self.keys.index(plot_param)].flatten(), self.Y, 'D', markersize=8, label=u'Observations (projected)', color='r')
+        axis.plot(x, mu, '--', color='k', label='Prediction')
+
+        axis.fill(np.concatenate([x, x[::-1]]), 
+                  np.concatenate([mu - 1.9600 * sigma, (mu + 1.9600 * sigma)[::-1]]),
+            alpha=.6, fc='c', ec='None', label='95% confidence interval')
+        
+        # axis.set_xlim((-2, 10))
+        axis.set_ylim((-0.2,1.2))
+        axis.set_ylabel('Area Under Precision Recall Curve', fontdict={'size':fontsize})
+        # axis.set_xlabel(r'$log(\tau)$', fontdict={'size':fontsize})
+        
+        utility = self.util.utility(mesh, self.gp, 0)
+        acq.plot(x, utility, label='Utility Function', color='purple')
+        acq.plot(x[np.argmax(utility)], np.max(utility), '*', markersize=15, 
+                 label=u'Next Best Guess', markerfacecolor='gold', markeredgecolor='k', markeredgewidth=1)
+        # acq.set_xlim((-2, 10))
+        acq.set_ylim((0, np.max(utility) + 0.5))
+        acq.set_ylabel('Utility', fontdict={'size':fontsize})
+        acq.set_xlabel(param_mapping_helper(plot_param), fontdict={'size':fontsize})
+        
+        axis.legend(loc=4)
+        acq.legend(loc=4)
+        print(mu)
+        print(sigma)
+        plt.show()
+
+    def plot2d(self,mesh,params,plot_params,mu,sigma,utility,resolution):
+        fontsize = 13
+
+        # prepare shit. make the plot objects and get the range that you're plotting over
+        fig,ax = plt.subplots(2,2,figsize = (14,10))
+        rest_string = 'Gaussian Process and Acquisition Function after {} Steps, projected onto ({},{})\n'.format(len(self.X),param_mapping_helper(plot_params[0]),param_mapping_helper(plot_params[1]))
+        for k,v in params.iteritems():
+            if v is not None:
+                kn,vn = param_mapping_helper(k,v)
+                rest_string += '{} = {}, '.format(kn,vn)
+        fig.suptitle(rest_string,fontdict={'size':fontsize + 4})
+        x = mesh[:,self.keys.index(plot_params[0])].flatten()
+        y = mesh[:,self.keys.index(plot_params[1])].flatten()
+        plots = []
+
+        # GP mean
+        ax[0][0].set_title('GP Predicted Mean',fontdict={'size':fontsize})
+        im00 = ax[0][0].hexbin(x,y,C = mu,gridsize = int(resolution*2/3),vmin = 0,vmax = 1)
+        plots.append((ax[0][0],im00))
+
+        # GP variance
+        ax[1][0].set_title('GP Variance',fontdict={'size':fontsize})
+        im10 = ax[1][0].hexbin(x,y,C = sigma,gridsize = int(resolution*2/3),vmin = np.min(sigma),vmax=np.max(sigma))
+        plots.append((ax[1][0],im10))
+
+        # Utility function
+        ax[0][1].set_title('Acquisition Function', fontdict={'size':fontsize})
+        im01 = ax[0][1].hexbin(x, y, C=utility, gridsize=int(resolution*2/3),vmin = np.min(utility),vmax=np.max(utility))
+        plots.append((ax[0][1],im01))
+
+        # Observations
+        ax[1][1].set_title('Observations',fontdict={'size':fontsize})
+        ax[1][1].plot(self.X[:,self.keys.index(plot_params[0])].flatten(),
+            self.X[:,self.keys.index(plot_params[1])].flatten(),
+            'x',
+            markersize = 4,
+            color = 'k',
+            label = 'Observations'
+            )
+        plots.append((ax[1][1],None))
+
+        # for every plot, do some labeling shit
+        lims = [self.pbounds[plot_params[i]][j] for i in [0,1] for j in [0,1]]
+        for axis,im in plots:
+            axis.axis(lims)
+            axis.set_xlabel(param_mapping_helper(plot_params[0]))
+            axis.set_ylabel(param_mapping_helper(plot_params[1]))
+            axis.set_aspect('equal')
+            if axis.get_title() != 'Observations':
+                cb = fig.colorbar(im, ax=axis)
+
+        # show
+        plt.show()
+
+    def get_parameter_mesh(self,param_inputs,resolution):
+        '''
+        A helper function for 'plot_stuff' method. Takes parameter range that is being plotted over and returns a set of mesh-grid points for that range
+        '''
+
+        param_inputs_copy = param_inputs.copy()
+        for k,v in param_inputs_copy.iteritems():
+            if v ==None:
+                param_inputs_copy[k] = np.linspace(self.pbounds[k][0],self.pbounds[k][1],resolution)
+            else:
+                param_inputs_copy[k] = np.array(v)
+
+        mesh_guys = np.meshgrid(*[param_inputs_copy[i] for i in self.keys])
+        mesh_flats = [guy.ravel() for guy in mesh_guys]
+        X = np.vstack(mesh_flats).T
+        return X
+
+    def posterior(self,param_inputs,resolution):
+        '''
+        Takes 
+        '''
+        mesh = self.get_parameter_mesh(param_inputs,resolution)
+        self.gp.fit(self.X, self.Y)
+        mu, sigma = self.gp.predict(mesh, return_std=True)
+        utility = self.util.utility(mesh,self.gp,self.Y.max())
+        # print mu.shape
+        # print sigma.shape
+        # print utility.shape
+        return mesh, mu, sigma, utility
